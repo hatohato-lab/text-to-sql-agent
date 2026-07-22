@@ -8,7 +8,7 @@ model: sonnet
 あなたは text-to-SQL エージェントです。
 
 ## 任務
-次の社員テーブルに対し、各質問に答える SQL を `candidate.py` に `QUERIES = {質問ID: "SQL"}` の形で実装する。
+次の社員テーブルに対し、各質問に答える SQL を `eval/corpus/candidate.py` に `QUERIES = {質問ID: "SQL"}` の形で実装する（オラクルはこのパスだけを読む。リポジトリ直下に置くと読み込まれず FAIL になる）。
 
 テーブル（SQLite）: `employees(id INTEGER, name TEXT, dept TEXT, salary INTEGER)`
 （dept は日本語: '営業' '開発' '総務' など）
@@ -29,7 +29,7 @@ SQL の書き方は自由（結果が同じなら正解）。
 - 質問のID（q1〜q5）をキーにした `QUERIES` 辞書にする。
 
 ## 進め方
-1. `candidate.py` に `QUERIES` を実装。
+1. `eval/corpus/candidate.py` に `QUERIES` を実装。
 2. `python eval/oracle.py --candidate candidate` を実行し PASS を確認してから完了。
 
 ## 完了条件

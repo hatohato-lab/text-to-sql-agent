@@ -60,10 +60,12 @@ def load(path):
 def run(query):
     """SQL を小さな DB で実行し、結果を“順序を無視した集合”で返す。動かなければ例外。"""
     con = sqlite3.connect(":memory:")
-    con.executescript(SCHEMA)
-    con.executemany("INSERT INTO employees VALUES (?,?,?,?)", SEED)
-    rows = con.execute(query).fetchall()
-    con.close()
+    try:
+        con.executescript(SCHEMA)
+        con.executemany("INSERT INTO employees VALUES (?,?,?,?)", SEED)
+        rows = con.execute(query).fetchall()
+    finally:
+        con.close()  # 実行エラー時も必ず接続を閉じる
     return sorted(str(r) for r in rows)  # 行の順番や書き方が違っても結果が同じなら一致とみなす
 
 
@@ -76,9 +78,9 @@ def evaluate(candidate):
         try:
             got = run(candidate[qid])
         except Exception as e:
-            return ("FAIL", f"{qid}『{question}』: SQL が実行できない（{type(e).__name__}）")
+            return ("FAIL", f"{qid}『{question}』: SQL が実行できない（{type(e).__name__}: {e}）")
         if got != want:
-            return ("FAIL", f"{qid}『{question}』: 実行結果がお手本と違う")
+            return ("FAIL", f"{qid}『{question}』: 実行結果がお手本と違う（got={got} / want={want}）")
     return ("PASS", f"全{len(TASKS)}問、実行結果がお手本と一致")
 
 
