@@ -29,6 +29,8 @@ python eval/oracle.py --selftest # オラクル自身を検証（②でFAILが�
 
 `.claude/agents/text-to-sql-agent.md` の指示で `eval/corpus/candidate.py`（`QUERIES = {質問ID: "SQL"}`）を実装し、`python eval/oracle.py --candidate candidate` で採点。オラクルは `eval/corpus/candidate.py` だけを読むため、他の場所（リポジトリ直下など）に置くと読み込めず FAIL になります。candidate が無くても `reference` で全工程を再現できます。
 
+**実行の上限**：1つの SQL は SQLite の VM 命令 1,000,000 個までで打ち切ります（正例と妥当な別解は最大 144 命令）。停止条件の無い再帰 CTE など終わらない SQL は、構文エラーとは別に「実行予算超過」の FAIL になります。時間でなく命令数で数えるので、機械の速さで結果が変わりません。
+
 ## しくみ
 
 ```mermaid

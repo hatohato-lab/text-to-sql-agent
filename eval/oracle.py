@@ -30,6 +30,16 @@ if hasattr(sys.stdout, "reconfigure"):
 EVAL = Path(__file__).resolve().parent
 CORPUS = EVAL / "corpus"
 
+# 1つの SQL に許す SQLite の VM 命令数の上限（2026-09-07 追加）。
+# 正例5問と妥当な別解は最大でも 144 命令（実測）。1,000,000 命令はその約7,000倍で、
+# 「停止条件の無い再帰 CTE」のような終わらない SQL だけを止める。時間でなく命令数で数えるので機械の速さに依らない。
+PROGRESS_N = 1000          # 何命令ごとに数えるか
+STEP_BUDGET = 1_000_000    # この命令数を超えたら打ち切る
+
+
+class BudgetExceeded(Exception):
+    """候補 SQL が実行予算を使い切った（終わらない SQL の疑い）。構文エラーとは区別して報告する。"""
+
 # 小さなデータベース（社員テーブル）と、お題（日本語の質問）。これがエージェントの“世界”。
 SCHEMA = "CREATE TABLE employees (id INTEGER, name TEXT, dept TEXT, salary INTEGER);"
 SEED = [
@@ -58,12 +68,25 @@ def load(path):
 
 
 def run(query):
-    """SQL を小さな DB で実行し、結果を“順序を無視した集合”で返す。動かなければ例外。"""
+    """SQL を小さな DB で実行し、結果を“順序を無視した集合”で返す。動かなければ例外。
+    STEP_BUDGET 命令を超える SQL は SQLite に中断させ、BudgetExceeded を投げる。"""
     con = sqlite3.connect(":memory:")
+    used = [0]
+
+    def guard():
+        used[0] += PROGRESS_N
+        return 1 if used[0] > STEP_BUDGET else 0  # 非ゼロを返すと SQLite が実行中のクエリを中断する
+
     try:
         con.executescript(SCHEMA)
         con.executemany("INSERT INTO employees VALUES (?,?,?,?)", SEED)
-        rows = con.execute(query).fetchall()
+        con.set_progress_handler(guard, PROGRESS_N)  # 準備が終わってから数え始める
+        try:
+            rows = con.execute(query).fetchall()
+        except sqlite3.OperationalError as e:
+            if used[0] > STEP_BUDGET:
+                raise BudgetExceeded(f"実行予算 {STEP_BUDGET:,} 命令を超過（終わらない SQL の疑い）") from e
+            raise
     finally:
         con.close()  # 実行エラー時も必ず接続を閉じる
     return sorted(str(r) for r in rows)  # 行の順番や書き方が違っても結果が同じなら一致とみなす
@@ -77,6 +100,8 @@ def evaluate(candidate):
             return ("FAIL", f"{qid}『{question}』: SQL が無い")
         try:
             got = run(candidate[qid])
+        except BudgetExceeded as e:
+            return ("FAIL", f"{qid}『{question}』: {e}")
         except Exception as e:
             return ("FAIL", f"{qid}『{question}』: SQL が実行できない（{type(e).__name__}: {e}）")
         if got != want:
@@ -111,6 +136,7 @@ def selftest():
         ("broken_wrongdept.py", "部署を取り違える → 結果が違う"),
         ("broken_nofilter.py", "WHERE を忘れる → 結果が違う"),
         ("broken_syntax.py", "SQL が壊れている → 実行エラー"),
+        ("broken_infinite.py", "停止条件の無い再帰 CTE → 実行予算超過で打ち切り"),
     ]
     brows, caught = [], True
     for f, why in controls:
